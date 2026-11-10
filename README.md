@@ -6,18 +6,41 @@ This project investigates the feasibility of using Neural Machine Translation (N
 
 ## Results
 
-Two datasets are used: **small** (up to 50 tokens) and **medium** (50 to 100 tokens). For each buggy snippet, the model generates *k* patch candidates using beam search.
+Two datasets are evaluated: **small** (up to 50 tokens) and **medium** (50 to 100 tokens). For each buggy snippet, the model generates $k \in [1, 50]$ patch candidates using vectorized beam search.
 
-* **Perfect predictions**: A bug is considered successfully fixed if at least one of the *k* generated patches perfectly matches the actual human fix. This percentage is calculated over the total number of bugs in the test set.
+### 1. Accuracy & Syntactic Correctness Benchmarking
 
-* **Syntactic correctness**: The percentage of generated patches that are syntactically valid Java code (verified via a parser, not compiled). This is calculated over the total number of generated patch candidates (number of bugs multiplied by *k*).
+- **Accuracy (Perfect Predictions):** Percentage of test bugs where at least one of the $k$ generated candidates exactly matches the human-written fix.
+- **Syntactic Correctness:** Percentage of total generated candidates ($\text{bugs} \times k$) that are syntactically valid Java methods (verified via `javalang`).
 
-### Small dataset (test: 5835 bugs)
+#### Small dataset (test: 5835 bugs)
+<img width="4200" height="1500" alt="charts_small" src="https://github.com/user-attachments/assets/2682e291-60de-44fe-bbe1-70d44268a6ad" />
 
 
+#### Medium dataset (test: 6546 bugs)
+<img width="4200" height="1500" alt="charts_medium" src="https://github.com/user-attachments/assets/5affce54-ccaa-4b63-a710-b88f94b797e0" />
 
-### Medium dataset (test: 6546 bugs)
 
+- **Exact-Match Accuracy:** Closely tracks the paper's baseline on the small dataset (**49.2%** vs. 50.2% at $k=50$) and outperforms the baseline on the medium dataset (**31.7%** vs. 28.6% at $k=50$).
+- **Syntax Stability:** Maintains **>96.7%** syntactic validity across all beam widths on both datasets, avoiding the baseline's syntax degradation at wider beams (82%–85%).
+
+---
+
+### 2. Training & Inference Time Profiling
+
+- **Training Time:** Using length-based bucketing (`BucketBatchSampler`) on single GPU T4 (Google Colab) and dual GPU P100 (Kaggle) reduces training time to **~2.5 hours** ($M_{small}$) and **~6 hours** ($M_{medium}$), compared to 6 hours and 15 hours on three GPUs in the original paper.
+- **Inference Profiling Setup:** Measured across all beam widths using `time.perf_counter()` paired with explicit **CUDA barrier synchronization** (`torch.cuda.synchronize()`) on single GPU T4.
+
+#### Small dataset (test: 5835 bugs)
+<img width="2400" height="1500" alt="time_chart_small" src="https://github.com/user-attachments/assets/336e8410-289d-4a2a-8761-86af192c4649" />
+
+
+#### Medium dataset (test: 6546 bugs)
+<img width="2400" height="1500" alt="time_chart_medium" src="https://github.com/user-attachments/assets/51c034ed-c547-4ceb-b650-0b1c10e3ff25" />
+
+
+- **Avg. Time per Bug (Green Line):** By batching $k$ beam branches in parallel on the GPU, scaling $k$ by $50\times$ only slightly increases per-bug latency from **0.038s to 0.060s** ($M_{small}$) and from **0.093s to 0.128s** ($M_{medium}$).
+- **Avg. Time per Patch (Orange Line):** Amortized generation latency drops sharply as $k$ grows, converging to **~1.2ms/patch** ($M_{small}$) and **~2.6ms/patch** ($M_{medium}$) at $k=50$.
 
 
 
